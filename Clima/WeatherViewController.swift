@@ -54,9 +54,6 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
         locationManager.requestWhenInUseAuthorization()
-        locationManager.startUpdatingLocation()
-        
-
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -65,9 +62,12 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
         fluidView?.alpha = 0.5
         fluidView?.startAnimation()
         fluidView?.startTiltAnimation()
+        locationManager.startUpdatingLocation()
     }
     
-    
+    override func viewDidDisappear(_ animated: Bool) {
+        locationManager.stopUpdatingLocation()
+    }
  
     
     //MARK: - Networking
