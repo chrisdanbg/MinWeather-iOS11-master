@@ -19,16 +19,18 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
     //Constants
     let WEATHER_URL = "https://api.darksky.net/forecast/"
     let APP_ID = "a039ffe9207798ea3e6337090c95e37f"
-    let localhost = "https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.meteoalarm.eu%2Fdocuments%2Frss%2Fbg%2FBG015.rss&api_key=uheaucy4amxjplfmxiojxmn1ddkoudzrxu6toncc"
+    let CITYAPI = "jkj8BLcguK1yGPne0hoern7Ts8NbiDCe"
 
     //Instance variables
     let locationManager = CLLocationManager()
     let weatherDataModer = WeatherDataModel()
     
     var location = CLLocation()
+    var showPercent = true
     
     //Pre-linked IBOutlets
-    //@IBOutlet weak var liquidView: UIView!
+    @IBOutlet weak var cityNameLabel: UILabel!
+    @IBOutlet weak var liquidView: UIView!
     @IBOutlet weak var warningLabel: UILabel!
     @IBOutlet weak var weatherIcon: UIImageView!
     @IBOutlet weak var cityLabel: UILabel!
@@ -54,14 +56,20 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
         locationManager.requestWhenInUseAuthorization()
+        
+        
+        // Setup Swipe Gesture Recognizer
+        let leftSwipe = UISwipeGestureRecognizer(target: self, action: #selector (handleSwipes(sender:)))
+        let rightSwipe = UISwipeGestureRecognizer(target: self, action: #selector (handleSwipes(sender:)))
+        
+        leftSwipe.direction = .left
+        rightSwipe.direction = .right
+        
+        view.addGestureRecognizer(leftSwipe)
+        view.addGestureRecognizer(rightSwipe)
     }
     
     override func viewDidAppear(_ animated: Bool) {
-        let fluidView = BAFluidView.init(frame: self.view.frame, startElevation: 0.5)
-        fluidView?.fillColor = #colorLiteral(red: 0.1411764771, green: 0.3960784376, blue: 0.5647059083, alpha: 1)
-        fluidView?.alpha = 0.5
-        fluidView?.startAnimation()
-        fluidView?.startTiltAnimation()
         locationManager.startUpdatingLocation()
     }
     
@@ -72,7 +80,7 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
     
     //MARK: - Networking
     /***************************************************************/
-    
+
 
 
     
@@ -81,12 +89,14 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
    
     
     //Write the updateWeatherData method here:
+  
+    
     func updateWeatherData(json: JSON) {
         let tempResult = json["currently"]["precipProbability"].double
         let currentlyMultiplied = tempResult! * 100
         
         updateLabels(tempToCheck: currentlyMultiplied, labelToUpdate: temperatureLabel)
-        
+        addFluidVIew(withElevation: tempResult! as NSNumber)
         let laterTempResult = json["hourly"]["data"][3]["precipProbability"].double
         let laterMultiplied = laterTempResult! * 100
         
@@ -108,14 +118,10 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
         }
     }
 
-    
-    func testJson(json: JSON) {
-        let summary = json["items"][0]["description"].stringValue
-        let str = summary.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression, range: nil)
-        let removeDays = str.replacingOccurrences(of: "Today", with: "")
-        warningLabel.text = removeDays
+    func updateCityData(json: JSON) {
+        let cityName = json["results"][0]["locations"][0]["adminArea5"].stringValue
+        cityNameLabel.text = "\(cityName)"
     }
-    
     func checkIfEventOccured() {
         locationManager.startUpdatingLocation()
         updateLocation()
@@ -131,10 +137,11 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
             
             let requestUrl = "\(WEATHER_URL)\(APP_ID)/\(latitude),\(longitude)"
             //let requestUrl = "\(localhost)"
-    
+            let findCityUrl = "https://www.mapquestapi.com/geocoding/v1/reverse?key=\(CITYAPI)&location=\(latitude),\(longitude)&includeRoadMetadata=true&includeNearestIntersection=true"
+         
             Alamofire.request(requestUrl).responseJSON { (response) in
                 if response.result.isSuccess {
-                    print(response.result.value!)
+                    //print(response.result.value!)
                     let weatherJSON : JSON = JSON(response.result.value!)
                     //self.updateWeatherData(json: weatherJSON)
                     self.updateWeatherData(json: weatherJSON)
@@ -143,24 +150,53 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
                     print("Fail")
                 }
             }
+            
+            Alamofire.request(findCityUrl).responseJSON { (cityData) in
+                if cityData.result.isSuccess {
+                    print(cityData.result.value!)
+                    let cityJSON : JSON = JSON(cityData.result.value!)
+                    self.updateCityData(json: cityJSON)
+                }
+            }
+            
         }
     }
+    
     
     //MARK: - UI Updates
     /***************************************************************/
     func updateLabels(tempToCheck: Double, labelToUpdate: UILabel) {
+  
+        
         if tempToCheck <= 20 {
-            labelToUpdate.text = "LOW"
+            labelToUpdate.leftToRightAnimation()
+            labelToUpdate.text = showPercent == true ? "LO" : "\(tempToCheck)%"
             backgroundView.backgroundColor = UIColor(red: 42/255, green: 208/255, blue: 255/255, alpha: 1.0)
         } else if tempToCheck > 20 && tempToCheck <= 60 {
-            labelToUpdate.text = "MEDIUM"
+            labelToUpdate.text = showPercent == true ? "MED" : "\(tempToCheck)%"
             backgroundView.backgroundColor = UIColor(red: 255/255, green: 176/255, blue: 106/255, alpha: 1.0)
         } else {
-            labelToUpdate.text = "HIGH"
+             labelToUpdate.text = showPercent == true ? "HI" : "\(tempToCheck)%"
             backgroundView.backgroundColor = UIColor(red: 255/255, green: 145/255, blue: 131/255, alpha: 1.0)
+        }
+        
+    }
+    
+    @objc func handleSwipes(sender: UISwipeGestureRecognizer) {
+            if sender.direction == .right {
+            showPercent = showPercent == true ? false : true
+            updateLocation()
         }
     }
     
+    func addFluidVIew(withElevation: NSNumber) {
+        let fluidView = BAFluidView.init(frame: self.view.frame, startElevation: withElevation)
+        fluidView?.fillColor = #colorLiteral(red: 0.1411764771, green: 0.3960784376, blue: 0.5647059083, alpha: 1)
+        fluidView?.alpha = 0.5
+        fluidView?.startAnimation()
+        fluidView?.startTiltAnimation()
+        //self.backgroundView.addSubview(fluidView!)
+    }
     
     
     
@@ -201,4 +237,25 @@ class WeatherViewController: UIViewController, CLLocationManagerDelegate {
     }
 }
 
+    // MARK: - Adding Swipe Animation To The Temperature Labels
+extension UILabel {
+    func leftToRightAnimation(duration: TimeInterval = 0.5, completionDelegate: AnyObject? = nil) {
+        // Create a CATransition object
+        let leftToRightTransition = CATransition()
+        
+        // Set its callback delegate to the completionDelegate that was provided
+        if let delegate: AnyObject = completionDelegate {
+            leftToRightTransition.delegate = delegate as! CAAnimationDelegate
+        }
+        
+        leftToRightTransition.type = kCATransitionPush
+        leftToRightTransition.subtype = kCATransitionFromLeft
+        leftToRightTransition.duration = duration
+        leftToRightTransition.timingFunction = CAMediaTimingFunction(name: kCAMediaTimingFunctionEaseInEaseOut)
+        leftToRightTransition.fillMode = kCAFillModeRemoved
+        
+        // Add the animation to the View's layer
+        self.layer.add(leftToRightTransition, forKey: "leftToRightTransition")
+    }
+}
 
